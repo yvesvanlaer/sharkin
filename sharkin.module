@@ -1,0 +1,216 @@
+<?php
+/**
+ * @file
+ * module for sharkin
+ * author: svdhout (steven.vandenhout@calibrate.be)
+ */
+
+/**
+ * Implements hook_menu
+ */
+function sharkin_menu() {
+  $items = array();
+  $items['request-song'] = array(
+    'title' => 'Request Song',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sharkin_search_form'),
+    'access callback' => TRUE,
+  );
+  $items['request-song/tinysong'] = array(
+    'title' => 'Request Song',
+    'page callback' => 'sharkin_tinysong',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['ajax/songs'] = array(
+    'title' => 'Songs Handler',
+    'page callback' => 'sharkin_ajax_songs',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Callback for request-song
+ */
+function sharkin_search_form() {
+  $form = array();
+
+  $form['play'] = array(
+    '#type' =>'select',
+    '#title' => t('control'),
+    '#options' => array(t("play"), t("pause")),
+    '#default_value' => variable_get("sharkin_playing", 1),
+  );
+
+  $form['SongIDDeluxe'] = array(
+    '#type' => 'autocomplete_deluxe',
+    '#title' => t('title'),
+    '#autocomplete_deluxe_path' => 'request-song/tinysong',
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+  );
+  $form['#submit'][] = "sharkin_search_form_submit";
+
+  return $form;
+}
+/**
+ * Submit callback for sharkin_search_form
+ */
+function sharkin_search_form_submit($form, &$form_state) {
+  $values = $form_state['values'];
+  variable_set("sharkin_playing", $values['play']);
+  if ($values['textfield'] != "") {
+    $song = str_replace(' ', '+', $values['textfield']);
+    $request = drupal_http_request("http://tinysong.com/b/$song?format=json&key=9ce9fa4a65eae8876ca12e331862fdcc");
+    $data = json_decode($request->data);
+    $fields = array(
+      'SongID' => $data->SongID,
+      'SongName' => $data->SongName,
+      'ArtistID' => $data->ArtistID,
+      'ArtistName' => $data->ArtistName,
+      'AlbumID' => $data->AlbumID,
+      'AlbumName' => $data->AlbumName,
+      'url' => $data->Url,
+    );
+    drupal_write_record('tinysong', $fields);
+  }
+}
+
+/**
+ * Callback for request-song/tinysong
+ */
+function sharkin_tinysong($string) {
+  $string = str_replace(' ', '+', $string);
+  $request = drupal_http_request("http://tinysong.com/s/$string?format=json&key=9ce9fa4a65eae8876ca12e331862fdcc");
+  $oData = json_decode($request->data);
+  foreach($oData as $data) {
+    $value = "[" . $data->SongID . "] " .  $data->ArtistName . " | " . $data->SongName;
+    $value = $data->ArtistName . " " . $data->SongName;
+    // alright, i can use html here.
+    $matches[$value] = "<h2>" . $data->ArtistName . "</h2> | " . $data->SongName;
+  }
+  drupal_json_output($matches);
+}
+
+/**
+ * Callback for ajax/songs
+ */
+function sharkin_ajax_songs() {
+  if ($_GET['action'] == 'getNewSongs') {
+    if (isset($_GET['added'])) {
+      $query = new EntityFieldQuery;
+      $result = $query
+        ->entityCondition('entity_type', 'tinysong')
+        ->execute();
+    }
+    else {
+      $query = new EntityFieldQuery;
+      $result = $query
+        ->entityCondition('entity_type', 'tinysong')
+        ->propertyCondition('added', 0)
+        ->range(0, 1)
+        ->execute();
+    }
+
+    if (isset($result['tinysong'])) {
+      foreach($result['tinysong'] as $key => $value) {
+        $song = entity_load('tinysong', array($value->sid));
+        $songs[] = $song[$value->sid]->SongID;
+        $fields['sid'] = $value->sid;
+        $fields['added'] = 1;
+        drupal_write_record('tinysong', $fields, 'sid');
+      }
+      $grooveshark['addSongsByID'] = $songs;
+      sharkin_jsonp_output($grooveshark);
+    }
+  }
+  if ($_GET['action'] == 'getControls') {
+    $grooveshark = array();
+    if (variable_get("sharkin_playing", 0)) $grooveshark['pause'] = 1;
+    else $grooveshark['play'] = 1;
+    sharkin_jsonp_output($grooveshark);
+  }
+}
+
+function sharkin_jsonp_output($vars) {
+  drupal_add_http_header('Content-Type', 'application/json');
+  echo $_GET['callback'] . "(" . drupal_json_encode($vars) . ")";
+}
+
+
+/********************************************************
+ * Bookmarklet block
+ *******************************************************/
+
+/**
+ * Implements hook_block_info().
+ */
+function sharkin_block_info() {
+  $blocks['sharkin_bookmarklet'] = array(
+    'info' => t('Sharkin Bookmarklet'),
+  );
+  return $blocks;
+}
+
+
+/**
+ * Implements hook_block_view().
+ */
+function sharkin_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'sharkin_bookmarklet':
+      $block['subject'] = t('Drag this button to you bookmarks bar');
+      $jspath = 'http://' . $_SERVER['SERVER_NAME'] . base_path() . drupal_get_path('module', 'sharkin') . '/js/sharkin.js';
+      $ajaxpath = 'http://' . $_SERVER['SERVER_NAME'] . base_path() . 'ajax/songs';
+      $bookmarklet = "javascript: (function () {var jsCode1 = document.createElement('script');jsCode1.innerHTML = 'var ajaxpath = \'$ajaxpath\';';document.body.appendChild(jsCode1);var jsCode = document.createElement('script');jsCode.setAttribute('src', '$jspath');document.body.appendChild(jsCode);}());";
+      $block['content'] = '<a href="' . $bookmarklet . '">' . t('Sharkin') . "</a>";
+      break;
+  }
+  return $block;
+}
+
+
+
+
+/********************************************************
+ * Entity Definition
+ *******************************************************/
+
+/*
+ * Implementation of hook_views_api()
+ */
+function sharkin_views_api() {
+  return array(
+      'api' => '3.0',
+      //'path' => drupal_get_path('module', 'sharkin') . '/views',
+  );
+}
+
+/**
+ * Implementation of hook_entity_info()
+ */
+function sharkin_entity_info() {
+  $entities['tinysong'] = array(
+      'label' => t('Tinysong'),
+      'base table' => 'tinysong',
+      'uri callback' => 'sharkin_tinysong_uri',
+      'fieldable' => 0,
+      'entity keys' => array(
+          'id' => 'sid',
+          'label' => 'sid'
+      ),
+      'module' => 'sharkin',
+      'controller class' => 'EntityAPIController',
+      'views controller class' => 'EntityDefaultViewsController',
+  );
+  return $entities;
+}
+function sharkin_tinysong_uri($sid) {
+  return db_fetch_object(db_query("SELECT * FROM {tinysong} WHERE sid = %d", $sid));
+}

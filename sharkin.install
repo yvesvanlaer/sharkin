@@ -1,0 +1,79 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the adtech module.
+ */
+
+function sharkin_install() {
+
+}
+
+function sharkin_uninstall() {
+  //db_query("DELETE FROM {variable} WHERE name LIKE 'sharkin_%'");
+  //cache_clear_all('variables', 'cache');
+  drupal_uninstall_schema('shaarkin');
+}
+
+function sharkin_schema() {
+  $schema['tinysong'] = array(
+    'description' => 'TODO: please describe this table!',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'SongID' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'SongName' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'ArtistID' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'ArtistName' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'AlbumID' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'AlbumName' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'url' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'added' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('sid'),
+  );
+
+  return $schema;
+}
